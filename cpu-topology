@@ -1,0 +1,186 @@
+#!/usr/bin/env ruby
+
+# This script will pretty print cpu core and cache information.
+# 
+# 
+# TODO: make sure all file reads are in exception blocks.
+# TODO: package and release
+
+require 'optparse'
+
+# some global hashes to store the data
+@memnode   = Hash.new{|h,k| h[k] = Array.new }
+@physcpu   = Hash.new{|h,k| h[k] = Array.new }
+@brothers  = Hash.new 
+@cachedata = Hash.new{|h,k| h[k] = Cache.new } 
+
+
+class Cache_level
+
+  attr_accessor :values
+
+  def initialize(path) 
+    @values = Hash.new
+    Dir.foreach(path) do |d|
+      next if d == "." or d == ".." 
+      File.open(path + "/" + d, "r") do |f|
+        p = f.gets.chomp
+	@values[d]  = p
+      end
+    end
+  end 
+
+  def print
+    level = @values['level']
+    size  = @values['size']
+    shared= @values['shared_cpu_list']
+    type  = @values['type']
+    type  = "Instruc" if type == "Instruction"
+    puts "\t\tlevel:  #{level}  size:  #{size}\ttype:\t#{type}\t\tshared cores:\t#{shared}"
+  end
+
+end 
+
+class Cache
+
+  attr_accessor :levels
+  attr_accessor :cpu
+
+  def initialize(path)
+    @levels = Array.new
+    Dir.foreach(path) do |d|
+      next if d == "." or d == ".."
+      @levels << Cache_level.new( path + d )
+    end
+    @cpu = path.split('/')[5].sub(/u(\d)$/,'u0\1')
+  end
+
+  # lets create a nice printing method
+  def print
+    puts "Cache  object " + @cpu
+    @levels.each do |l|
+      l.print
+    end
+  end
+
+end 
+
+def find_mem_node path
+  Dir.foreach(path) do |f|
+    if f =~ /^node(\d*)$/
+      return $1
+    end
+  end
+  puts "This machine is not NUMA enabled, so please don't use the -a or -n command line options"
+  exit 1   
+end
+
+# print the physical view of things
+def print_physical_view
+  puts "\nEach physical CPU has the following cores:"
+  puts "ChipN\t\tList of cores"
+  puts "============================="
+  @physcpu.sort.each do |elem|
+    puts "chip#{elem[0]}\t=>\t#{elem[1].join(",")}"
+  end
+end 
+
+# memory nodes that are being used by each core
+def print_node_view
+  puts "\nMemory node view (list of cores that share cache):"
+  puts "nodeN\t\tList of cpus sharing node"
+  puts "========================================="
+  @memnode.sort.each do |e|
+    puts "node#{e[0]}\t=>\t#{e[1].join(",")}"
+  end 
+end 
+
+
+# print the cache view of things
+def print_cache_view
+  puts "\nA caches view of the cpus"
+  @cachedata.sort.each do |e|
+    e[1].print
+  end
+end
+
+# print cpu view of things
+# lists of each core and thier "brother" cores
+def print_cpu_view
+  puts "\nEach core has the following cores also on the same die:"
+  puts "CoreN\t\tClosest cores"
+  puts "============================="
+  @brothers.sort.each do |e|
+    puts "core#{e[0]}\t=>\t#{e[1]}"
+  end
+end
+
+# print...
+def print_results 
+  puts "The following details have been extracted from the /sys filesystem:\n"
+  print_physical_view if @options[:all] or @options[:physical] 
+  print_cpu_view if @options[:all] or @options[:cores] 
+  print_node_view if @options[:all] or @options[:node] 
+  print_cache_view if @options[:all] or @options[:cache] 
+end
+
+# commandline parameters and set variables
+@options = {}
+optparse = OptionParser.new do|opts|
+  opts.banner = "Usage: cpu-topology [options] (one or many must be selected) "
+  @options[:all] = false
+  opts.on( '-a', '--all', 'Display all information' ) do
+    @options[:all] = true
+  end
+  @options[:physical] = false
+  opts.on( '-p', '--physical', 'Display the physical mappings of cores and cpus' ) do
+    @options[:physical] = true
+  end
+  @options[:cores] = false
+  opts.on( '-s', '--sibling', 'Display the mapping of cores and their sibling cores on the same die' ) do
+    @options[:cores] = true
+  end
+  @options[:node] = false
+  opts.on( '-n', '--node', 'Display the mapping of cpu cores to NUMA node (L3 cache) on each die' ) do
+    @options[:node] = true
+  end
+  @options[:cache] = false
+  opts.on( '-c', '--cache', 'Display the cache information for all CPUs' ) do
+    @options[:cache] = true
+  end
+  opts.on( '-h', '--help', 'Display this screen' ) do
+    puts opts
+    exit
+  end
+end
+optparse.parse!
+if not @options[:all] and not @options[:physical] and not @options[:cores] and not @options[:node] and not @options[:cache]
+  puts optparse.help
+  exit 
+end 
+
+# check that the sysfs is mounted 
+sysfs =  `mount`.split("\n").grep(/sysfs/).map { |x| x.split(" ")[2]  }
+default = "#{sysfs}/devices/system/cpu/"
+Dir.chdir(default) if File.directory? default
+
+
+Dir.foreach(default) do |de|
+  next if  de == "." or de == ".." or de == "cpuidle" or de == "cpufreq" or de =="perf_events"
+  if File.directory?(de) 
+    de =~ /^cpu(\d*)$/
+    cpu_id = $1.to_i
+    File.open(default + de + "/topology/physical_package_id", "r") do |f| 
+      pc = f.gets.chomp
+      @physcpu[pc] <<  cpu_id 
+    end
+    File.open(default + de + "/topology/core_siblings_list", "r") do |f|
+      pc = f.gets.chomp
+      @brothers[cpu_id] = pc
+    end
+    @memnode[find_mem_node( default + de )] << cpu_id if @options[:all] or @options[:node] # sue to some machines being non numa 
+    @cachedata[cpu_id] = Cache.new( default + de + "/cache/" )
+  end
+end
+
+print_results
