@@ -14,8 +14,43 @@ require 'optparse'
 @brothers  = Hash.new 
 @cachedata = Hash.new{|h,k| h[k] = Cache.new } 
 
+class CacheDetails
 
-class Cache_level
+  attr_accessor :coherency_line_size, :level, :number_of_sets
+  attr_accessor :physical_line_paartition, :shared_cpu_list,
+  attr_accessor :shared_cpu_map, :size, :type, :ways_of_associativity
+
+  def initialize( path ) 
+    
+  end
+
+end 
+
+class SysObject
+#class CpuTopology
+#  attr_accessor :core_id, :core_siblings, :core_siblings_list,
+#  attr_accessor :physical_package_id, :thread_siblings, :thread_siblings_list
+
+  def initialize( path ) 
+    raise "path in constructor is invalid" unless File.exists? path   
+    Dir.foreach( path ) do |f|
+      next if f == '.' or f == '..'
+      File.open( "#{path}/#{d}", 'r') do |line|
+        while l = line.gets
+          instance_variable_Set(f,l.chomp)
+        end
+      end
+    end 
+  end 
+
+end 
+
+class NodeDetails
+  
+  attr_accessor 
+end
+
+class CacheLevel
 
   attr_accessor :values
 
@@ -25,7 +60,7 @@ class Cache_level
       next if d == "." or d == ".." 
       File.open(path + "/" + d, "r") do |f|
         p = f.gets.chomp
-	@values[d]  = p
+	      @values[d]  = p
       end
     end
   end 
@@ -159,10 +194,11 @@ if not @options[:all] and not @options[:physical] and not @options[:cores] and n
   exit 
 end 
 
-# check that the sysfs is mounted 
-sysfs =  `mount`.split("\n").grep(/sysfs/).map { |x| x.split(" ")[2]  }
-default = "#{sysfs}/devices/system/cpu/"
-Dir.chdir(default) if File.directory? default
+def check_setup
+  sysfs =  `mount`.split("\n").grep(/sysfs/).map { |x| x.split(" ")[2]  }
+  default = "#{sysfs}/devices/system/cpu/"
+  Dir.chdir(default) if File.directory? default
+end
 
 
 Dir.foreach(default) do |de|
@@ -182,6 +218,7 @@ Dir.foreach(default) do |de|
     @cachedata[cpu_id] = Cache.new( default + de + "/cache/" )
   end
 end
+
 
 
 def main()
