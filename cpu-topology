@@ -36,9 +36,9 @@ class SysObject
     Dir.foreach( path ) do |f|
       next if f == '.' or f == '..'
       File.open( "#{path}/#{d}", 'r') do |line|
-        while l = line.gets
-          instance_variable_Set(f,l.chomp)
-        end
+        l = line.gets
+        instance_variable_Set(f,l.chomp)
+        self.class.send( :attr_accessor, f )
       end
     end 
   end 
