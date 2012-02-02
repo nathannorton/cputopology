@@ -183,4 +183,9 @@ Dir.foreach(default) do |de|
   end
 end
 
-print_results
+
+def main()
+  print_results
+end
+
+main if __FILE__ == 0
