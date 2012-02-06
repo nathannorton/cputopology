@@ -9,23 +9,6 @@
 require 'optparse'
 require 'pp'
 
-# some global hashes to store the data
-@memnode   = Hash.new{|h,k| h[k] = Array.new }
-@physcpu   = Hash.new{|h,k| h[k] = Array.new }
-@brothers  = Hash.new 
-@cachedata = Hash.new{|h,k| h[k] = Cache.new } 
-
-class CacheDetails
-
-  attr_accessor :coherency_line_size, :level, :number_of_sets
-  attr_accessor :physical_line_paartition, :shared_cpu_list
-  attr_accessor :shared_cpu_map, :size, :type, :ways_of_associativity
-
-  def initialize( path ) 
-    
-  end
-
-end 
 
 class SysObject
 
@@ -42,72 +25,75 @@ class SysObject
     end 
   end 
 
-end 
-
-class NodeDetails
-  
-  attr_accessor 
-end
-
-class CacheLevel
-
-  attr_accessor :values
-
-  def initialize(path) 
-    @values = Hash.new
-    Dir.foreach(path) do |d|
-      next if d == "." or d == ".." 
-      File.open(path + "/" + d, "r") do |f|
-        p = f.gets.chomp
-	      @values[d]  = p
-      end
-    end
-  end 
-
-  def print
-    level = @values['level']
-    size  = @values['size']
-    shared= @values['shared_cpu_list']
-    type  = @values['type']
-    type  = "Instruc" if type == "Instruction"
-    puts "\t\tlevel:  #{level}  size:  #{size}\ttype:\t#{type}\t\tshared cores:\t#{shared}"
-  end
-
-end 
-
-class Cache
-
-  attr_accessor :levels
-  attr_accessor :cpu
-
-  def initialize(path)
-    @levels = Array.new
-    Dir.foreach(path) do |d|
-      next if d == "." or d == ".."
-      @levels << Cache_level.new( path + d )
-    end
-    @cpu = path.split('/')[5].sub(/u(\d)$/,'u0\1')
-  end
-
-  # lets create a nice printing method
-  def print
-    puts "Cache  object " + @cpu
-    @levels.each do |l|
-      l.print
+  def pretty_print( printer )
+    self.instance_variables.each do |iv|
+      printer.text "\t\t"
+      printer.text "#{iv}: #{instance_variable_get(iv)}\n" 
     end
   end
 
 end 
 
-def find_mem_node path
-  Dir.foreach(path) do |f|
-    if f =~ /^node(\d*)$/
-      return $1
-    end
-  end
-  puts "This machine is not NUMA enabled, so please don't use the -a or -n command line options"
-  exit 1   
-end
+
+##class CacheLevel
+#
+#  attr_accessor :values
+#
+#  def initialize(path) 
+#    @values = Hash.new
+#    Dir.foreach(path) do |d|
+#      next if d == "." or d == ".." 
+#      File.open(path + "/" + d, "r") do |f|
+#        p = f.gets.chomp
+#	      @values[d]  = p
+#      end
+#    end
+#  end 
+#
+#  def print
+#    level = @values['level']
+#    size  = @values['size']
+#    shared= @values['shared_cpu_list']
+#    type  = @values['type']
+#    type  = "Instruc" if type == "Instruction"
+#    puts "\t\tlevel:  #{level}  size:  #{size}\ttype:\t#{type}\t\tshared cores:\t#{shared}"
+#  end
+#
+#end 
+
+#class Cache
+#
+#  attr_accessor :levels
+#  attr_accessor :cpu
+#
+#  def initialize(path)
+#    @levels = Array.new
+#    Dir.foreach(path) do |d|
+#      next if d == "." or d == ".."
+#      @levels << Cache_level.new( path + d )
+#    end
+#    @cpu = path.split('/')[5].sub(/u(\d)$/,'u0\1')
+#  end
+#
+#  # lets create a nice printing method
+#  def print
+#    puts "Cache  object " + @cpu
+#    @levels.each do |l|
+#      l.print
+#    end
+#  end
+#
+#end 
+
+#def find_mem_node path
+#  Dir.foreach(path) do |f|
+#    if f =~ /^node(\d*)$/
+#      return $1
+#    end
+#  end
+#  puts "This machine is not NUMA enabled, so please don't use the -a or -n command line options"
+#  exit 1   
+#end
 
 # print the physical view of things
 def print_physical_view
@@ -205,43 +191,47 @@ def check_setup
   default
 end
 
-def test
-Dir.foreach(default) do |de|
-  next if  de == "." or de == ".." or de == "cpuidle" or de == "cpufreq" or de =="perf_events"
-  if File.directory?(de) 
-    de =~ /^cpu(\d*)$/
-    cpu_id = $1.to_i
-    File.open(default + de + "/topology/physical_package_id", "r") do |f| 
-      pc = f.gets.chomp
-      @physcpu[pc] <<  cpu_id 
-    end
-    File.open(default + de + "/topology/core_siblings_list", "r") do |f|
-      pc = f.gets.chomp
-      @brothers[cpu_id] = pc
-    end
-    @memnode[find_mem_node( default + de )] << cpu_id if @options[:all] or @options[:node] # sue to some machines being non numa 
-    @cachedata[cpu_id] = Cache.new( default + de + "/cache/" )
-  end
-end
-end 
+#def test
+#Dir.foreach(default) do |de|
+#  next if  de == "." or de == ".." or de == "cpuidle" or de == "cpufreq" or de =="perf_events"
+#  if File.directory?(de) 
+#    de =~ /^cpu(\d*)$/
+#    cpu_id = $1.to_i
+#    File.open(default + de + "/topology/physical_package_id", "r") do |f| 
+#      pc = f.gets.chomp
+#      @physcpu[pc] <<  cpu_id 
+#    end
+#    File.open(default + de + "/topology/core_siblings_list", "r") do |f|
+#      pc = f.gets.chomp
+#      @brothers[cpu_id] = pc
+#    end
+#    @memnode[find_mem_node( default + de )] << cpu_id if @options[:all] or @options[:node] # sue to some machines being non numa 
+#    @cachedata[cpu_id] = Cache.new( default + de + "/cache/" )
+#  end
+#end
+#end 
 
 def get_all_cpu_data( path )
-  cpu   = []
-  count = 0
-  while count < @cpus do
-    location = "#{path}cpu#{count}/topology/"
-    pp location
-    cpu << SysObject.new( location ) 
-    count += 1 
+  cpu = {}
+  cpu_count = 0
+  while cpu_count < @cpus do
+    cpu_location   = "#{path}cpu#{cpu_count}/topology/"
+    cache_location = "#{path}cpu#{cpu_count}/cache/"
+    cpu["cpu#{cpu_count}".to_sym] = {}
+    cpu["cpu#{cpu_count}".to_sym][:topology]  = SysObject.new( cpu_location ) 
+    cpu["cpu#{cpu_count}".to_sym][:cache]     = get_all_cache_data( cache_location ) 
+    cpu_count += 1 
   end
   cpu
 end 
 
-def get_all_cache_details( path ) 
-  cache = []
-  count = 0
-  while count < @cache_levels do 
-    location = "#{path}cpu"
+def get_all_cache_data(  path ) 
+  cache = {}
+  cache_count = 0
+  while cache_count < @cache_levels do 
+    location = "#{path}index#{cache_count}/"
+    cache["index#{cache_count}".to_sym] = SysObject.new( location ) 
+    cache_count += 1  
   end
   cache
 end
@@ -255,17 +245,6 @@ def get_num_cpus_cache( path, search )
 end
 
 def main()
-#  print_results
- # puts 'begin'
- # a = SysObject.new( '/sys/devices/system/cpu/cpu0/topology' ) 
- # pp a.class
- # pp a.methods
- # pp a.inspect
- # pp a
- # puts 'end '
- # puts a.core_siblings
-  #a.core_siblings = "sfsfSF"
- # puts a.core_siblings
   @sys_path = check_setup
 
   # get # num cpus + cache levels 
@@ -273,7 +252,8 @@ def main()
   @cache_levels = get_num_cpus_cache( "#{@sys_path}cpu0/cache", "index" )
   
   cpu_details = get_all_cpu_data( @sys_path ) 
-  cache_details = get_all_cache_data( @sys_path ) 
+
+  pp cpu_details
 end
 
 main if __FILE__ == $0
