@@ -6,7 +6,9 @@
 # TODO: make sure all file reads are in exception blocks.
 # TODO: package and release
 
+require 'rubygems'
 require 'optparse'
+require 'json' 
 require 'pp'
 
 
@@ -34,6 +36,29 @@ class SysObject
 
 end 
 
+
+def parse_options
+  options = {}
+  optparse = OptionParser.new do|opts|
+    opts.banner = "Usage: cpu-topology [options] "
+    options[:json] = false
+    opts.on( '-j', '--json', 'Display all information in json format' ) do
+      options[:json] = true
+    end
+    opts.on( '-h', '--help', 'Display this screen' ) do
+      puts opts
+      exit
+    end
+  end
+  begin
+    optparse.parse!
+  rescue OptionParser::InvalidOption => e
+    puts e
+    puts optparse 
+    exit 1
+  end
+  options
+end
 
 ##class CacheLevel
 #
@@ -144,42 +169,6 @@ def print_results
   print_cache_view if @options[:all] or @options[:cache] 
 end
 
-def options
-# commandline parameters and set variables
-@options = {}
-optparse = OptionParser.new do|opts|
-  opts.banner = "Usage: cpu-topology [options] (one or many must be selected) "
-  @options[:all] = false
-  opts.on( '-a', '--all', 'Display all information' ) do
-    @options[:all] = true
-  end
-  @options[:physical] = false
-  opts.on( '-p', '--physical', 'Display the physical mappings of cores and cpus' ) do
-    @options[:physical] = true
-  end
-  @options[:cores] = false
-  opts.on( '-s', '--sibling', 'Display the mapping of cores and their sibling cores on the same die' ) do
-    @options[:cores] = true
-  end
-  @options[:node] = false
-  opts.on( '-n', '--node', 'Display the mapping of cpu cores to NUMA node (L3 cache) on each die' ) do
-    @options[:node] = true
-  end
-  @options[:cache] = false
-  opts.on( '-c', '--cache', 'Display the cache information for all CPUs' ) do
-    @options[:cache] = true
-  end
-  opts.on( '-h', '--help', 'Display this screen' ) do
-    puts opts
-    exit
-  end
-end
-optparse.parse!
-if not @options[:all] and not @options[:physical] and not @options[:cores] and not @options[:node] and not @options[:cache]
-  puts optparse.help
-  exit 
-end 
-end
 
 def check_setup
   mounts = '/proc/mounts'
@@ -190,26 +179,6 @@ def check_setup
   end
   default
 end
-
-#def test
-#Dir.foreach(default) do |de|
-#  next if  de == "." or de == ".." or de == "cpuidle" or de == "cpufreq" or de =="perf_events"
-#  if File.directory?(de) 
-#    de =~ /^cpu(\d*)$/
-#    cpu_id = $1.to_i
-#    File.open(default + de + "/topology/physical_package_id", "r") do |f| 
-#      pc = f.gets.chomp
-#      @physcpu[pc] <<  cpu_id 
-#    end
-#    File.open(default + de + "/topology/core_siblings_list", "r") do |f|
-#      pc = f.gets.chomp
-#      @brothers[cpu_id] = pc
-#    end
-#    @memnode[find_mem_node( default + de )] << cpu_id if @options[:all] or @options[:node] # sue to some machines being non numa 
-#    @cachedata[cpu_id] = Cache.new( default + de + "/cache/" )
-#  end
-#end
-#end 
 
 def get_all_cpu_data( path )
   cpu = {}
@@ -245,9 +214,10 @@ def get_num_cpus_cache( path, search )
 end
 
 def main()
-  @sys_path = check_setup
 
-  # get # num cpus + cache levels 
+  opts = parse_options 
+
+  @sys_path = check_setup
   @cpus = get_num_cpus_cache( @sys_path, "cpu" ) 
   @cache_levels = get_num_cpus_cache( "#{@sys_path}cpu0/cache", "index" )
   
